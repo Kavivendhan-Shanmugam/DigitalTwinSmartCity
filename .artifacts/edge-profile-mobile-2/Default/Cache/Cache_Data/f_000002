@@ -1,0 +1,563 @@
+const $ = (id) => document.getElementById(id);
+
+const zoneMeta = {
+    environment: {
+        code: "A",
+        title: "ENVIRONMENT",
+        detail: "Temperature, humidity, atmospheric quality and daylight telemetry."
+    },
+    power: {
+        code: "B",
+        title: "POWER GRID",
+        detail: "Voltage, current, demand and distribution health monitoring."
+    },
+    traffic: {
+        code: "C",
+        title: "MOBILITY",
+        detail: "Virtual traffic density, vehicle flow and congestion prediction."
+    },
+    network: {
+        code: "D",
+        title: "LORA MESH",
+        detail: "Long-range node availability, signal strength and packet integrity."
+    },
+    security: {
+        code: "E",
+        title: "CYBER DEFENSE",
+        detail: "Anomaly fusion, city health scoring and autonomous response."
+    }
+};
+
+const state = {
+    selectedSector: "environment",
+    data: {
+        environment: { temperature: 0, humidity: 0, airQuality: 0, light: 0 },
+        power: { voltage: 0, current: 0, watts: 0, gridLoad: 0 },
+        traffic: { density: 0, vehicles: 0, meanSpeed: 0 },
+        network: { rssi: -120, packetLoss: 100, latency: 0 },
+        sectors: { environment: 0, power: 0, traffic: 0, network: 0, security: 0 },
+        risks: { air: 0, power: 0, traffic: 0, network: 0, sensor: 0 },
+        threat: { score: 0, level: "NORMAL" },
+        cityHealth: 0,
+        nodes: {
+            environment: { online: false },
+            power: { online: false },
+            gateway: { online: false }
+        },
+        incidents: [],
+        packets: 0,
+        uptimeSeconds: 0,
+        mode: "SIMULATION",
+        isNight: false,
+        lightingMode: "AUTO"
+    },
+    lastIncidentId: null
+};
+
+function formatUptime(totalSeconds) {
+    const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, "0");
+    const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, "0");
+    const seconds = Math.floor(totalSeconds % 60).toString().padStart(2, "0");
+    return `${hours}:${minutes}:${seconds}`;
+}
+
+function riskColor(value) {
+    if (value >= 70) return "#ff4161";
+    if (value >= 42) return "#ffbf5a";
+    return "#41f3a4";
+}
+
+function healthColor(value) {
+    if (value < 48) return "#ff4161";
+    if (value < 75) return "#ffbf5a";
+    return "#41f3a4";
+}
+
+function cityCondition(health, threat) {
+    if (threat >= 70 || health < 48) return ["CRITICAL", "critical", "Immediate response protocols are active."];
+    if (threat >= 38 || health < 75) return ["DEGRADED", "warning", "Anomalies are affecting city readiness."];
+    return ["STABLE", "stable", "All monitored systems are within operating range."];
+}
+
+function updateSector(name, value) {
+    const bar = $(`${name}Bar`);
+    const label = $(`${name}Health`);
+    const color = healthColor(value);
+    bar.style.width = `${value}%`;
+    bar.style.background = color;
+    bar.style.boxShadow = `0 0 8px ${color}`;
+    label.textContent = Math.round(value);
+    label.style.color = color;
+}
+
+function updateIncidents(incidents) {
+    const newestId = incidents[0]?.id ?? null;
+    if (newestId === state.lastIncidentId) return;
+    state.lastIncidentId = newestId;
+    const feed = $("incidentFeed");
+
+    if (!incidents.length) {
+        feed.innerHTML = '<div class="empty-state">No classified incidents.</div>';
+        return;
+    }
+
+    feed.innerHTML = incidents.slice(0, 6).map((incident) => {
+        const time = new Date(incident.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        return `
+            <div class="incident-item ${incident.severity}">
+                <span class="incident-time">${time}</span>
+                <span class="incident-severity"></span>
+                <div class="incident-copy">
+                    <strong>${incident.title}</strong>
+                    <p>${incident.message}</p>
+                </div>
+            </div>`;
+    }).join("");
+}
+
+function updateNode(elementId, node) {
+    const element = $(elementId);
+    const online = Boolean(node?.online);
+    element.classList.toggle("offline", !online);
+    element.querySelector(":scope > b").textContent = online ? "ONLINE" : "OFFLINE";
+}
+
+function updateDashboard(data) {
+    state.data = data;
+
+    $("temperature").textContent = Number(data.environment.temperature).toFixed(1);
+    $("temperatureTrend").textContent = data.environment.temperature > 36 ? "ABOVE NOMINAL" : "WITHIN NOMINAL BAND";
+    $("airQuality").textContent = Math.round(data.environment.airQuality);
+    $("airStatus").textContent = data.environment.airQuality > 180 ? "HAZARDOUS SIGNATURE" : data.environment.airQuality > 100 ? "ELEVATED PARTICULATES" : "AIR QUALITY GOOD";
+    $("gridLoad").textContent = Math.round(data.power.gridLoad);
+    $("powerValue").textContent = `${Number(data.power.watts).toFixed(1)} W / ${Number(data.power.voltage).toFixed(2)} V`;
+    $("trafficDensity").textContent = Math.round(data.traffic.density);
+    $("vehicleCount").textContent = `${data.traffic.vehicles} VEHICLES / ${data.traffic.meanSpeed} KMH`;
+    $("packetIntegrity").textContent = Math.max(0, 100 - data.network.packetLoss).toFixed(1);
+    $("rssiValue").textContent = `${data.network.rssi} dBm / ${data.network.latency} ms`;
+
+    $("operationMode").textContent = data.mode;
+    $("cityHealth").textContent = Math.round(data.cityHealth);
+    $("healthRing").style.setProperty("--health", data.cityHealth);
+    $("healthRing").style.setProperty("--health-color", healthColor(data.cityHealth));
+
+    const [condition, conditionClass, summary] = cityCondition(data.cityHealth, data.threat.score);
+    const conditionPill = $("cityCondition");
+    conditionPill.textContent = condition;
+    conditionPill.className = `status-pill ${conditionClass}`;
+    $("healthSummary").textContent = summary;
+
+    Object.entries(data.sectors).forEach(([name, value]) => updateSector(name, value));
+
+    const threatColor = riskColor(data.threat.score);
+    $("threatLevel").textContent = data.threat.level;
+    $("threatLevel").style.color = threatColor;
+    $("threatScore").textContent = Math.round(data.threat.score);
+    $("threatPanel").style.setProperty("--threat-color", threatColor);
+
+    $("weatherReadout").textContent = `HUM ${Number(data.environment.humidity).toFixed(1)}%`;
+    $("lightReadout").textContent = `LUX ${Math.round(data.environment.light).toString().padStart(4, "0")}`;
+    $("lightingButton").textContent = `LIGHTS: ${data.lightingMode}`;
+    $("packetCount").textContent = Math.round(data.packets).toString().padStart(6, "0");
+    $("packetLoss").textContent = `${Number(data.network.packetLoss).toFixed(1)}%`;
+    $("uptime").textContent = formatUptime(data.uptimeSeconds);
+
+    updateNode("nodeEnvironment", data.nodes.environment);
+    updateNode("nodePower", data.nodes.power);
+    updateNode("nodeGateway", data.nodes.gateway);
+    updateIncidents(data.incidents || []);
+    drawThreatRadar(data.risks);
+}
+
+function selectSector(name) {
+    if (!zoneMeta[name]) return;
+    state.selectedSector = name;
+    const meta = zoneMeta[name];
+    document.querySelectorAll(".sector-row").forEach((row) => row.classList.toggle("active", row.dataset.sector === name));
+    $("selectedSectorCode").textContent = meta.code;
+    $("zoneCode").textContent = `SECTOR ${meta.code}`;
+    $("zoneTitle").textContent = meta.title;
+    $("zoneDetail").textContent = meta.detail;
+}
+
+function drawThreatRadar(risks) {
+    const canvas = $("threatRadar");
+    const context = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2 + 2;
+    const radius = Math.min(width, height) * 0.39;
+    const entries = [
+        ["AIR", risks.air],
+        ["GRID", risks.power],
+        ["FLOW", risks.traffic],
+        ["NET", risks.network],
+        ["SENSOR", risks.sensor]
+    ];
+    const angles = entries.map((_, index) => -Math.PI / 2 + index * Math.PI * 2 / entries.length);
+
+    context.clearRect(0, 0, width, height);
+    context.lineWidth = 1;
+
+    for (let ring = 1; ring <= 4; ring += 1) {
+        context.beginPath();
+        angles.forEach((angle, index) => {
+            const distance = radius * ring / 4;
+            const x = centerX + Math.cos(angle) * distance;
+            const y = centerY + Math.sin(angle) * distance;
+            if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+        });
+        context.closePath();
+        context.strokeStyle = `rgba(72, 184, 218, ${0.08 + ring * 0.035})`;
+        context.stroke();
+    }
+
+    angles.forEach((angle) => {
+        context.beginPath();
+        context.moveTo(centerX, centerY);
+        context.lineTo(centerX + Math.cos(angle) * radius, centerY + Math.sin(angle) * radius);
+        context.strokeStyle = "rgba(72, 184, 218, .12)";
+        context.stroke();
+    });
+
+    context.beginPath();
+    entries.forEach((entry, index) => {
+        const distance = radius * Math.max(0.08, entry[1] / 100);
+        const x = centerX + Math.cos(angles[index]) * distance;
+        const y = centerY + Math.sin(angles[index]) * distance;
+        if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+    });
+    context.closePath();
+    const maximumRisk = Math.max(...entries.map((entry) => entry[1]));
+    const color = riskColor(maximumRisk);
+    context.fillStyle = `${color}22`;
+    context.strokeStyle = color;
+    context.shadowColor = color;
+    context.shadowBlur = 7;
+    context.fill();
+    context.stroke();
+    context.shadowBlur = 0;
+
+    context.fillStyle = "#698397";
+    context.font = "7px Consolas, monospace";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    entries.forEach((entry, index) => {
+        const x = centerX + Math.cos(angles[index]) * (radius + 13);
+        const y = centerY + Math.sin(angles[index]) * (radius + 10);
+        context.fillText(entry[0], x, y);
+    });
+}
+
+class CityRenderer {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.context = canvas.getContext("2d");
+        this.width = 1000;
+        this.height = 620;
+        this.elapsed = 0;
+        this.lastFrame = performance.now();
+        this.zones = {
+            environment: { x: 62, y: 62, w: 246, h: 146, cx: 185, cy: 135 },
+            power: { x: 704, y: 60, w: 235, h: 150, cx: 822, cy: 135 },
+            traffic: { x: 344, y: 194, w: 310, h: 235, cx: 500, cy: 312 },
+            network: { x: 713, y: 424, w: 225, h: 130, cx: 826, cy: 489 },
+            security: { x: 62, y: 424, w: 245, h: 130, cx: 185, cy: 489 }
+        };
+        this.buildings = [
+            [87, 91, 46, 38, 7], [151, 83, 69, 51, 9], [237, 103, 42, 67, 6],
+            [727, 88, 49, 69, 8], [797, 78, 53, 48, 10], [869, 104, 39, 61, 7],
+            [379, 232, 61, 48, 8], [458, 230, 38, 72, 6], [540, 246, 72, 40, 9],
+            [376, 340, 42, 60, 7], [444, 348, 78, 47, 11], [551, 329, 55, 70, 8],
+            [89, 454, 52, 57, 8], [164, 445, 73, 43, 9], [253, 467, 35, 55, 6],
+            [735, 451, 43, 50, 8], [802, 443, 58, 66, 10], [882, 464, 35, 44, 6]
+        ];
+        this.vehicles = Array.from({ length: 22 }, (_, index) => ({
+            route: index % 4,
+            progress: ((index * 0.173) + (index % 3) * 0.071) % 1,
+            direction: index % 2 ? 1 : -1,
+            color: ["#38d9ff", "#ffbf5a", "#a784ff", "#41f3a4"][index % 4]
+        }));
+        this.resizeObserver = new ResizeObserver(() => this.resize());
+        this.resizeObserver.observe(canvas.parentElement);
+        this.canvas.addEventListener("click", (event) => this.handleClick(event));
+        this.resize();
+        requestAnimationFrame((time) => this.frame(time));
+    }
+
+    resize() {
+        const bounds = this.canvas.parentElement.getBoundingClientRect();
+        const ratio = Math.min(window.devicePixelRatio || 1, 2);
+        this.canvas.width = Math.max(1, Math.round(bounds.width * ratio));
+        this.canvas.height = Math.max(1, Math.round(bounds.height * ratio));
+        this.canvas.style.width = `${bounds.width}px`;
+        this.canvas.style.height = `${bounds.height}px`;
+    }
+
+    handleClick(event) {
+        const bounds = this.canvas.getBoundingClientRect();
+        const x = (event.clientX - bounds.left) / bounds.width * this.width;
+        const y = (event.clientY - bounds.top) / bounds.height * this.height;
+        const match = Object.entries(this.zones).find(([, zone]) => x >= zone.x && x <= zone.x + zone.w && y >= zone.y && y <= zone.y + zone.h);
+        if (match) selectSector(match[0]);
+    }
+
+    frame(time) {
+        const delta = Math.min(50, time - this.lastFrame) / 1000;
+        this.lastFrame = time;
+        this.elapsed += delta;
+        const meanSpeed = state.data.traffic.meanSpeed || 35;
+        this.vehicles.forEach((vehicle) => {
+            vehicle.progress = (vehicle.progress + delta * (0.025 + meanSpeed / 1100) * vehicle.direction + 1) % 1;
+        });
+        this.draw();
+        requestAnimationFrame((nextTime) => this.frame(nextTime));
+    }
+
+    setupLogicalCanvas() {
+        const ratioX = this.canvas.width / this.width;
+        const ratioY = this.canvas.height / this.height;
+        this.context.setTransform(ratioX, 0, 0, ratioY, 0, 0);
+        this.context.clearRect(0, 0, this.width, this.height);
+    }
+
+    draw() {
+        this.setupLogicalCanvas();
+        this.drawGrid();
+        this.drawZones();
+        this.drawLinks();
+        this.drawRoads();
+        this.drawBuildings();
+        this.drawStreetLights();
+        this.drawVehicles();
+        this.drawZoneLabels();
+    }
+
+    drawGrid() {
+        const ctx = this.context;
+        ctx.fillStyle = "#040c14";
+        ctx.fillRect(0, 0, this.width, this.height);
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= this.width; x += 25) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, this.height);
+            ctx.strokeStyle = x % 100 === 0 ? "rgba(56,217,255,.055)" : "rgba(56,217,255,.018)";
+            ctx.stroke();
+        }
+        for (let y = 0; y <= this.height; y += 25) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(this.width, y);
+            ctx.strokeStyle = y % 100 === 0 ? "rgba(56,217,255,.055)" : "rgba(56,217,255,.018)";
+            ctx.stroke();
+        }
+    }
+
+    drawZones() {
+        const ctx = this.context;
+        Object.entries(this.zones).forEach(([name, zone]) => {
+            const health = state.data.sectors[name] ?? 100;
+            const color = healthColor(health);
+            const selected = state.selectedSector === name;
+            ctx.save();
+            ctx.setLineDash(selected ? [7, 5] : [3, 8]);
+            ctx.lineDashOffset = -this.elapsed * (selected ? 12 : 5);
+            ctx.lineWidth = selected ? 1.4 : 1;
+            ctx.strokeStyle = selected ? `${color}aa` : `${color}38`;
+            ctx.fillStyle = selected ? `${color}08` : "rgba(12,38,50,.035)";
+            ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+            ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
+            ctx.restore();
+
+            if (health < 74) {
+                const pulse = 14 + (Math.sin(this.elapsed * 3) + 1) * 9;
+                ctx.beginPath();
+                ctx.arc(zone.cx, zone.cy, pulse, 0, Math.PI * 2);
+                ctx.strokeStyle = `${color}${health < 48 ? "bb" : "77"}`;
+                ctx.stroke();
+            }
+        });
+    }
+
+    drawRoads() {
+        const ctx = this.context;
+        const roads = [
+            [0, 219, 1000, 219], [0, 418, 1000, 418],
+            [322, 0, 322, 620], [679, 0, 679, 620]
+        ];
+        roads.forEach(([x1, y1, x2, y2]) => {
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.lineWidth = 35;
+            ctx.strokeStyle = "#07121c";
+            ctx.stroke();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = "rgba(56,217,255,.16)";
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.setLineDash([12, 14]);
+            ctx.lineDashOffset = -this.elapsed * 9;
+            ctx.strokeStyle = "rgba(135,181,195,.17)";
+            ctx.stroke();
+            ctx.setLineDash([]);
+        });
+    }
+
+    drawLinks() {
+        const ctx = this.context;
+        const gateway = this.zones.network;
+        const targets = [this.zones.environment, this.zones.power, this.zones.security];
+        targets.forEach((target, index) => {
+            const offline = index === 0 && !state.data.nodes.environment?.online;
+            ctx.beginPath();
+            ctx.moveTo(gateway.cx, gateway.cy);
+            ctx.lineTo(target.cx, target.cy);
+            ctx.setLineDash([5, 9]);
+            ctx.lineDashOffset = -this.elapsed * 14;
+            ctx.strokeStyle = offline ? "rgba(255,65,97,.5)" : "rgba(56,217,255,.22)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.setLineDash([]);
+        });
+    }
+
+    drawBuildings() {
+        const ctx = this.context;
+        const night = state.data.isNight;
+        this.buildings.forEach(([x, y, width, height, floors], buildingIndex) => {
+            ctx.fillStyle = "rgba(9,29,42,.95)";
+            ctx.fillRect(x + 5, y + 5, width, height);
+            ctx.fillStyle = "#0a1c29";
+            ctx.fillRect(x, y, width, height);
+            ctx.strokeStyle = "rgba(71,174,204,.22)";
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = "rgba(56,217,255,.05)";
+            ctx.fillRect(x + 5, y + 5, width - 10, height - 10);
+
+            const columns = Math.max(2, Math.floor(width / 15));
+            const rows = Math.max(2, Math.min(4, Math.floor(height / 14)));
+            for (let row = 0; row < rows; row += 1) {
+                for (let column = 0; column < columns; column += 1) {
+                    const lit = (row + column + buildingIndex + floors) % 3 !== 0;
+                    ctx.fillStyle = night && lit ? "rgba(255,191,90,.5)" : "rgba(72,166,195,.14)";
+                    ctx.fillRect(x + 7 + column * ((width - 14) / columns), y + 7 + row * ((height - 14) / rows), 3, 3);
+                }
+            }
+        });
+    }
+
+    drawStreetLights() {
+        const ctx = this.context;
+        const lightsOn = state.data.lightingMode === "FORCED ON" || (state.data.lightingMode === "AUTO" && state.data.isNight);
+        const positions = [];
+        for (let x = 30; x < 980; x += 55) positions.push([x, 197], [x, 441]);
+        for (let y = 28; y < 600; y += 55) positions.push([300, y], [701, y]);
+        positions.forEach(([x, y]) => {
+            ctx.beginPath();
+            ctx.arc(x, y, lightsOn ? 2.7 : 1.6, 0, Math.PI * 2);
+            ctx.fillStyle = lightsOn ? "#ffcf66" : "rgba(118,146,155,.28)";
+            if (lightsOn) {
+                ctx.shadowColor = "#ffbf5a";
+                ctx.shadowBlur = 9;
+            }
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        });
+    }
+
+    drawVehicles() {
+        const ctx = this.context;
+        const visibleCount = Math.max(7, Math.round((state.data.traffic.vehicles || 22) / 2.1));
+        this.vehicles.slice(0, Math.min(visibleCount, this.vehicles.length)).forEach((vehicle) => {
+            let x;
+            let y;
+            let width = 10;
+            let height = 4;
+            if (vehicle.route === 0 || vehicle.route === 1) {
+                x = vehicle.progress * 1040 - 20;
+                y = vehicle.route === 0 ? 212 : 425;
+            } else {
+                x = vehicle.route === 2 ? 315 : 686;
+                y = vehicle.progress * 660 - 20;
+                width = 4;
+                height = 10;
+            }
+            ctx.fillStyle = vehicle.color;
+            ctx.shadowColor = vehicle.color;
+            ctx.shadowBlur = 5;
+            ctx.fillRect(x, y, width, height);
+            ctx.shadowBlur = 0;
+        });
+    }
+
+    drawZoneLabels() {
+        const ctx = this.context;
+        Object.entries(this.zones).forEach(([name, zone]) => {
+            const meta = zoneMeta[name];
+            const health = state.data.sectors[name] ?? 100;
+            const color = healthColor(health);
+            ctx.fillStyle = "rgba(3,12,20,.86)";
+            ctx.fillRect(zone.x + 8, zone.y + zone.h - 26, 111, 18);
+            ctx.strokeStyle = `${color}4d`;
+            ctx.strokeRect(zone.x + 8, zone.y + zone.h - 26, 111, 18);
+            ctx.fillStyle = color;
+            ctx.font = "7px Consolas, monospace";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+            ctx.fillText(`${meta.code} / ${meta.title}`, zone.x + 14, zone.y + zone.h - 17);
+            ctx.textAlign = "right";
+            ctx.fillStyle = "#9ec2cd";
+            ctx.fillText(`${Math.round(health)}`, zone.x + 112, zone.y + zone.h - 17);
+        });
+    }
+}
+
+const socket = typeof io === "function" ? io() : null;
+
+function setConnection(online) {
+    const dot = $("connectionDot");
+    dot.className = `connection-dot ${online ? "online" : "offline"}`;
+    $("connectionText").textContent = online ? "ENCRYPTED / LIVE" : "LINK OFFLINE";
+}
+
+if (socket) {
+    socket.on("connect", () => setConnection(true));
+    socket.on("disconnect", () => setConnection(false));
+    socket.on("cityData", updateDashboard);
+} else {
+    setConnection(false);
+}
+
+document.querySelectorAll(".sector-row").forEach((row) => {
+    row.addEventListener("click", () => selectSector(row.dataset.sector));
+});
+
+document.querySelectorAll("[data-incident]").forEach((button) => {
+    button.addEventListener("click", () => {
+        if (!socket?.connected) return;
+        button.disabled = true;
+        socket.emit("triggerIncident", button.dataset.incident);
+        setTimeout(() => { button.disabled = false; }, 700);
+    });
+});
+
+$("restoreButton").addEventListener("click", () => socket?.emit("recoverSystems"));
+$("lightingButton").addEventListener("click", () => socket?.emit("toggleLighting"));
+
+setInterval(() => {
+    $("systemTime").textContent = new Date().toLocaleTimeString([], { hour12: false });
+}, 250);
+
+selectSector("environment");
+drawThreatRadar(state.data.risks);
+new CityRenderer($("cityCanvas"));
+
+fetch("/api/status")
+    .then((response) => response.ok ? response.json() : Promise.reject(new Error("Status unavailable")))
+    .then(updateDashboard)
+    .catch(() => setConnection(false));

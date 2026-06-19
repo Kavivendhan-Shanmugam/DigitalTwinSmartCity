@@ -1,0 +1,11 @@
+{
+  "name": "sentinel-x",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sentinel-X cyber digital twin smart city command center",
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "install:backend": "npm --prefix backend install",
+    "test": "npm --prefix backend test"
+  }
+}

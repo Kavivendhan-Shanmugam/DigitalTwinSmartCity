@@ -1,0 +1,23 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Sentinel-X cyber digital twin command center",
+  "main": "server.js",
+  "scripts": {
+    "test": "node --check server.js",
+    "prestart": "node -e \"try{require('express');require('socket.io')}catch(e){console.error('Dependencies missing. Run: npm install');process.exit(1)}\"",
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  }
+}

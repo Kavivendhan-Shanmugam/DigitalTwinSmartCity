@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#06111c">
+    <title>Sentinel-X // Cyber Digital Twin</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js" defer></script>
+    <script src="app.js" defer></script>
+</head>
+<body>
+    <div class="ambient-grid" aria-hidden="true"></div>
+    <div class="scanline" aria-hidden="true"></div>
+
+    <main class="command-shell">
+        <header class="topbar">
+            <div class="brand-lockup">
+                <div class="brand-mark" aria-hidden="true"><span></span></div>
+                <div>
+                    <div class="eyebrow">CITY OPERATIONS / DIGITAL TWIN</div>
+                    <h1>SENTINEL<span>–X</span></h1>
+                </div>
+            </div>
+
+            <div class="system-ribbon" aria-label="System status">
+                <div class="ribbon-cell">
+                    <span class="data-label">OPERATION MODE</span>
+                    <strong id="operationMode">SIMULATION</strong>
+                </div>
+                <div class="ribbon-cell">
+                    <span class="data-label">SYSTEM TIME</span>
+                    <strong id="systemTime">--:--:--</strong>
+                </div>
+                <div class="ribbon-cell connection-cell">
+                    <span class="connection-dot" id="connectionDot"></span>
+                    <div>
+                        <span class="data-label">CONTROL LINK</span>
+                        <strong id="connectionText">CONNECTING</strong>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <section class="metric-strip" aria-label="Primary telemetry">
+            <article class="metric-card" data-accent="cyan">
+                <div class="metric-icon">TEMP</div>
+                <div class="metric-copy">
+                    <span class="data-label">AMBIENT TEMP</span>
+                    <strong><span id="temperature">--</span><small>°C</small></strong>
+                    <span class="metric-trend" id="temperatureTrend">CALIBRATING</span>
+                </div>
+                <div class="sparkline" id="tempSparkline" aria-hidden="true"></div>
+            </article>
+            <article class="metric-card" data-accent="green">
+                <div class="metric-icon">AIR</div>
+                <div class="metric-copy">
+                    <span class="data-label">AIR QUALITY</span>
+                    <strong><span id="airQuality">--</span><small>AQI</small></strong>
+                    <span class="metric-trend" id="airStatus">ANALYZING</span>
+                </div>
+                <div class="sparkline" id="airSparkline" aria-hidden="true"></div>
+            </article>
+            <article class="metric-card" data-accent="amber">
+                <div class="metric-icon">GRID</div>
+                <div class="metric-copy">
+                    <span class="data-label">GRID DEMAND</span>
+                    <strong><span id="gridLoad">--</span><small>%</small></strong>
+                    <span class="metric-trend" id="powerValue">-- W NOMINAL</span>
+                </div>
+                <div class="sparkline" id="powerSparkline" aria-hidden="true"></div>
+            </article>
+            <article class="metric-card" data-accent="violet">
+                <div class="metric-icon">FLOW</div>
+                <div class="metric-copy">
+                    <span class="data-label">TRAFFIC DENSITY</span>
+                    <strong><span id="trafficDensity">--</span><small>%</small></strong>
+                    <span class="metric-trend" id="vehicleCount">-- VEHICLES</span>
+                </div>
+                <div class="sparkline" id="trafficSparkline" aria-hidden="true"></div>
+            </article>
+            <article class="metric-card" data-accent="blue">
+                <div class="metric-icon">LORA</div>
+                <div class="metric-copy">
+                    <span class="data-label">PACKET INTEGRITY</span>
+                    <strong><span id="packetIntegrity">--</span><small>%</small></strong>
+                    <span class="metric-trend" id="rssiValue">-- dBm SIGNAL</span>
+                </div>
+                <div class="sparkline" id="networkSparkline" aria-hidden="true"></div>
+            </article>
+        </section>
+
+        <section class="workspace-grid">
+            <aside class="left-rail">
+                <article class="hud-panel health-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="data-label">COMPOSITE READINESS</span>
+                            <h2>City health</h2>
+                        </div>
+                        <span class="micro-code">SX.01</span>
+                    </div>
+                    <div class="health-core">
+                        <div class="health-ring" id="healthRing">
+                            <div class="health-ring-inner">
+                                <strong id="cityHealth">--</strong>
+                                <span>PERCENT</span>
+                            </div>
+                        </div>
+                        <div class="health-copy">
+                            <span class="status-pill stable" id="cityCondition">STABLE</span>
+                            <p id="healthSummary">Synchronizing city systems.</p>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="hud-panel sectors-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="data-label">LIVE SYSTEMS</span>
+                            <h2>Sector integrity</h2>
+                        </div>
+                        <span class="micro-code">05 ZONES</span>
+                    </div>
+                    <div class="sector-stack" id="sectorStack">
+                        <button class="sector-row active" data-sector="environment">
+                            <span class="sector-index">A</span>
+                            <span class="sector-name">Environment<small>DHT22 / MQ / LDR</small></span>
+                            <span class="sector-meter"><i id="environmentBar"></i></span>
+                            <strong id="environmentHealth">--</strong>
+                        </button>
+                        <button class="sector-row" data-sector="power">
+                            <span class="sector-index">B</span>
+                            <span class="sector-name">Power grid<small>INA219 / ACS712</small></span>
+                            <span class="sector-meter"><i id="powerBar"></i></span>
+                            <strong id="powerHealth">--</strong>
+                        </button>
+                        <button class="sector-row" data-sector="traffic">
+                            <span class="sector-index">C</span>
+                            <span class="sector-name">Mobility<small>VIRTUAL ENGINE</small></span>
+                            <span class="sector-meter"><i id="trafficBar"></i></span>
+                            <strong id="trafficHealth">--</strong>
+                        </button>
+                        <button class="sector-row" data-sector="network">
+                            <span class="sector-index">D</span>
+                            <span class="sector-name">LoRa mesh<small>SX1278 UPLINK</small></span>
+                            <span class="sector-meter"><i id="networkBar"></i></span>
+                            <strong id="networkHealth">--</strong>
+                        </button>
+                        <button class="sector-row" data-sector="security">
+                            <span class="sector-index">E</span>
+                            <span class="sector-name">Cyber defense<small>ANOMALY ENGINE</small></span>
+                            <span class="sector-meter"><i id="securityBar"></i></span>
+                            <strong id="securityHealth">--</strong>
+                        </button>
+                    </div>
+                </article>
+            </aside>
+
+            <section class="map-column">
+                <article class="map-panel">
+                    <div class="map-toolbar">
+                        <div>
+                            <span class="data-label">SENTINEL GEOSPATIAL CORE</span>
+                            <h2>Live city twin <span>// SECTOR <b id="selectedSectorCode">A</b></span></h2>
+                        </div>
+                        <div class="map-actions">
+                            <button class="tool-button active" id="liveViewButton" type="button"><span></span> LIVE VIEW</button>
+                            <button class="tool-button" id="lightingButton" type="button">LIGHTS: AUTO</button>
+                            <button class="tool-button" id="trafficConsoleButton" type="button">TRAFFIC LAB</button>
+                        </div>
+                    </div>
+
+                    <div class="map-stage" id="mapStage">
+                        <canvas id="cityCanvas" aria-label="Animated two-dimensional city digital twin"></canvas>
+                        <div class="map-corners" aria-hidden="true"></div>
+                        <div class="map-readout top-left">
+                            <span>LAT 12.9716 N</span>
+                            <span>LON 77.5946 E</span>
+                        </div>
+                        <div class="map-readout top-right">
+                            <span id="weatherReadout">HUM --%</span>
+                            <span id="lightReadout">LUX ----</span>
+                        </div>
+                        <div class="zone-card" id="zoneCard">
+                            <div class="zone-card-head">
+                                <span id="zoneCode">SECTOR A</span>
+                                <span class="status-dot"></span>
+                            </div>
+                            <strong id="zoneTitle">ENVIRONMENT</strong>
+                            <p id="zoneDetail">Temperature and atmospheric telemetry.</p>
+                        </div>
+                        <div class="emergency-banner" id="emergencyBanner" role="status" aria-live="polite">
+                            <span class="emergency-beacon"></span>
+                            <div>
+                                <small>EMERGENCY PRIORITY</small>
+                                <strong id="emergencyTitle">AMBULANCE DISPATCHED</strong>
+                            </div>
+                            <b id="emergencyEta">ETA --s</b>
+                        </div>
+                        <aside class="traffic-console" id="trafficConsole" aria-label="Virtual traffic simulation controls">
+                            <div class="traffic-console-head">
+                                <div>
+                                    <span class="data-label">MOBILITY ENGINE</span>
+                                    <h3>Virtual Traffic Lab</h3>
+                                </div>
+                                <button type="button" id="trafficConsoleClose" aria-label="Close traffic controls">×</button>
+                            </div>
+                            <div class="traffic-mode-line">
+                                <span>CONTROL MODE</span>
+                                <strong id="trafficMode">AUTO</strong>
+                            </div>
+                            <div class="lane-controls">
+                                <label class="lane-control" for="laneNorth">
+                                    <span>NORTH</span>
+                                    <input id="laneNorth" data-lane="north" type="range" min="0" max="30" value="7">
+                                    <output id="laneNorthValue">07</output>
+                                </label>
+                                <label class="lane-control" for="laneEast">
+                                    <span>EAST</span>
+                                    <input id="laneEast" data-lane="east" type="range" min="0" max="30" value="8">
+                                    <output id="laneEastValue">08</output>
+                                </label>
+                                <label class="lane-control" for="laneSouth">
+                                    <span>SOUTH</span>
+                                    <input id="laneSouth" data-lane="south" type="range" min="0" max="30" value="6">
+                                    <output id="laneSouthValue">06</output>
+                                </label>
+                                <label class="lane-control" for="laneWest">
+                                    <span>WEST</span>
+                                    <input id="laneWest" data-lane="west" type="range" min="0" max="30" value="6">
+                                    <output id="laneWestValue">06</output>
+                                </label>
+                            </div>
+                            <div class="traffic-summary">
+                                <div><span>TOTAL VEHICLES</span><strong id="trafficPreviewTotal">27</strong></div>
+                                <div><span>TRAFFIC DENSITY</span><strong id="trafficPreviewDensity">23%</strong></div>
+                            </div>
+                            <div class="traffic-actions">
+                                <button type="button" id="applyTrafficButton">APPLY MANUAL FLOW</button>
+                                <button type="button" id="autoTrafficButton">RESUME AUTO</button>
+                            </div>
+                            <button class="emergency-dispatch" type="button" id="ambulanceButton">
+                                <span class="dispatch-icon">+</span>
+                                <span><small>EMERGENCY EVENT</small>DISPATCH AMBULANCE</span>
+                            </button>
+                        </aside>
+                        <div class="map-legend">
+                            <span><i class="legend-dot healthy"></i> NOMINAL</span>
+                            <span><i class="legend-dot caution"></i> DEGRADED</span>
+                            <span><i class="legend-dot critical"></i> CRITICAL</span>
+                            <span><i class="legend-line"></i> LORA LINK</span>
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <aside class="right-rail">
+                <article class="hud-panel threat-panel" id="threatPanel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="data-label">ANOMALY FUSION ENGINE</span>
+                            <h2>Threat radar</h2>
+                        </div>
+                        <span class="micro-code">SX.AI</span>
+                    </div>
+                    <div class="threat-layout">
+                        <canvas id="threatRadar" width="240" height="190" aria-label="Threat risk radar"></canvas>
+                        <div class="threat-score">
+                            <span>LEVEL</span>
+                            <strong id="threatLevel">--</strong>
+                            <small><b id="threatScore">--</b> / 100</small>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="hud-panel incident-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <span class="data-label">AI CLASSIFIED EVENTS</span>
+                            <h2>Incident feed</h2>
+                        </div>
+                        <span class="live-tag">LIVE</span>
+                    </div>
+                    <div class="incident-feed" id="incidentFeed" aria-live="polite">
+                        <div class="empty-state">Awaiting telemetry stream...</div>
+                    </div>
+                </article>
+
+                <article class="hud-panel response-panel">
+                    <div class="panel-heading compact-heading">
+                        <div>
+                            <span class="data-label">DEMONSTRATION CONSOLE</span>
+                            <h2>Event injection</h2>
+                        </div>
+                    </div>
+                    <div class="command-grid">
+                        <button type="button" data-incident="gas"><span>A1</span> GAS LEAK</button>
+                        <button type="button" data-incident="power"><span>B1</span> GRID SPIKE</button>
+                        <button type="button" data-incident="traffic"><span>C1</span> CONGESTION</button>
+                        <button type="button" data-incident="network"><span>D1</span> NODE LOSS</button>
+                    </div>
+                    <button class="restore-button" id="restoreButton" type="button">EXECUTE AUTONOMOUS RECOVERY</button>
+                </article>
+            </aside>
+        </section>
+
+        <footer class="network-dock">
+            <div class="dock-title">
+                <span class="data-label">LORA INFRASTRUCTURE</span>
+                <strong>NETWORK TOPOLOGY</strong>
+            </div>
+            <div class="network-node" id="nodeEnvironment">
+                <span class="node-orbit"><i>EN</i></span>
+                <div><strong>ENV NODE</strong><small>ESP32 / SX1278</small></div>
+                <b>ONLINE</b>
+            </div>
+            <span class="network-link"><i></i></span>
+            <div class="network-node" id="nodePower">
+                <span class="node-orbit"><i>PW</i></span>
+                <div><strong>POWER NODE</strong><small>ESP32 / SX1278</small></div>
+                <b>ONLINE</b>
+            </div>
+            <span class="network-link"><i></i></span>
+            <div class="network-node gateway" id="nodeGateway">
+                <span class="node-orbit"><i>GW</i></span>
+                <div><strong>CONTROL GATEWAY</strong><small>ESP32 / SOCKET.IO</small></div>
+                <b>ONLINE</b>
+            </div>
+            <div class="dock-stats">
+                <div><span>PACKETS</span><strong id="packetCount">000000</strong></div>
+                <div><span>LOSS</span><strong id="packetLoss">0.0%</strong></div>
+                <div><span>UPTIME</span><strong id="uptime">00:00:00</strong></div>
+            </div>
+        </footer>
+    </main>
+</body>
+</html>
