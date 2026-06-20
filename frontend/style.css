@@ -509,7 +509,7 @@ h2 {
 .emergency-banner strong { display: block; margin-top: 2px; font-size: 9px; letter-spacing: .07em; }
 .emergency-banner > b { color: #ff94a5; font-family: Consolas, monospace; font-size: 9px; font-weight: 500; }
 
-.traffic-console {
+.signal-console {
     position: absolute;
     z-index: 7;
     top: 16px;
@@ -526,48 +526,36 @@ h2 {
     transition: opacity .24s ease, transform .24s ease;
 }
 
-.traffic-console.open { opacity: 1; pointer-events: auto; transform: translateX(0); }
-.traffic-lab-deep-link .traffic-console,
-.traffic-lab-deep-link .emergency-banner { transition: none; }
-.traffic-console::before { content: ""; position: absolute; top: -1px; left: -1px; width: 50px; height: 1px; background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+.signal-console.open { opacity: 1; pointer-events: auto; transform: translateX(0); }
+.signal-console-deep-link .signal-console,
+.signal-console-deep-link .emergency-banner { transition: none; }
+.signal-console::before { content: ""; position: absolute; top: -1px; left: -1px; width: 50px; height: 1px; background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
 
-.traffic-console-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.traffic-console-head h3 { margin-top: 3px; font-size: 13px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
-.traffic-console-head button { width: 25px; height: 25px; color: var(--muted); background: transparent; border: 1px solid var(--line); cursor: pointer; line-height: 20px; }
-.traffic-console-head button:hover { color: var(--cyan); border-color: var(--line-hot); }
+.signal-console-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.signal-console-head h3 { margin-top: 3px; font-size: 13px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
+.signal-console-head button { width: 25px; height: 25px; color: var(--muted); background: transparent; border: 1px solid var(--line); cursor: pointer; line-height: 20px; }
+.signal-console-head button:hover { color: var(--cyan); border-color: var(--line-hot); }
 
-.traffic-mode-line { display: flex; justify-content: space-between; padding: 9px 0 7px; color: var(--muted); font-family: Consolas, monospace; font-size: 8px; letter-spacing: .08em; }
-.traffic-mode-line strong { color: var(--cyan); font-weight: 500; }
-.lane-controls { display: flex; flex-direction: column; gap: 4px; }
-.lane-control { min-height: 29px; display: grid; grid-template-columns: 41px minmax(0, 1fr) 24px; align-items: center; gap: 8px; color: #91adba; font-family: Consolas, monospace; font-size: 8px; letter-spacing: .05em; }
-.lane-control output { color: var(--ink); text-align: right; }
+.signal-phase-line,
+.signal-timer-line { display: flex; justify-content: space-between; padding: 8px 0 4px; color: var(--muted); font-family: Consolas, monospace; font-size: 8px; letter-spacing: .08em; }
+.signal-phase-line strong,
+.signal-timer-line strong { color: var(--cyan); font-weight: 500; }
 
-.lane-control input[type="range"] {
-    width: 100%;
-    min-width: 0;
-    height: 3px;
-    margin: 0;
-    appearance: none;
-    background: linear-gradient(90deg, rgba(56,217,255,.48), rgba(56,217,255,.12));
-    border-radius: 0;
-    cursor: pointer;
-}
+.signal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.signal-post { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; background: rgba(56,217,255,.035); border: 1px solid rgba(56,217,255,.13); }
+.signal-post > span { color: var(--muted); font-family: Consolas, monospace; font-size: 7px; letter-spacing: .08em; }
+.signal-lamp { width: 10px; height: 10px; border-radius: 50%; background: rgba(35,52,62,.85); border: 1px solid rgba(87,185,224,.18); }
+.signal-lamp.red.active { background: var(--red); box-shadow: 0 0 10px rgba(255,65,97,.55); }
+.signal-lamp.yellow.active { background: var(--amber); box-shadow: 0 0 10px rgba(255,191,90,.55); }
+.signal-lamp.green.active { background: var(--green); box-shadow: 0 0 10px rgba(65,243,164,.55); }
 
-.lane-control input[type="range"]::-webkit-slider-thumb { width: 10px; height: 13px; appearance: none; background: var(--cyan); border: 2px solid #082232; box-shadow: 0 0 8px rgba(56,217,255,.55); }
-.lane-control input[type="range"]::-moz-range-thumb { width: 8px; height: 11px; background: var(--cyan); border: 2px solid #082232; border-radius: 0; }
+.signal-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 9px; }
+.signal-summary div { padding: 8px; background: rgba(56,217,255,.035); border: 1px solid rgba(56,217,255,.13); }
+.signal-summary span { display: block; color: var(--muted); font-family: Consolas, monospace; font-size: 7px; letter-spacing: .07em; }
+.signal-summary strong { display: block; margin-top: 3px; color: var(--cyan); font-family: Consolas, monospace; font-size: 15px; font-weight: 500; }
 
-.traffic-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 9px; }
-.traffic-summary div { padding: 8px; background: rgba(56,217,255,.035); border: 1px solid rgba(56,217,255,.13); }
-.traffic-summary span { display: block; color: var(--muted); font-family: Consolas, monospace; font-size: 7px; letter-spacing: .07em; }
-.traffic-summary strong { display: block; margin-top: 3px; color: var(--cyan); font-family: Consolas, monospace; font-size: 15px; font-weight: 500; }
-
-.traffic-actions { display: grid; grid-template-columns: 1.25fr 1fr; gap: 5px; margin-top: 7px; }
-.traffic-actions button,
-.emergency-dispatch { min-height: 30px; color: #92adba; background: rgba(8,25,38,.88); border: 1px solid rgba(87,185,224,.2); font-family: Consolas, monospace; font-size: 7px; letter-spacing: .05em; cursor: pointer; }
-.traffic-actions button:hover { color: var(--cyan); border-color: rgba(56,217,255,.45); }
-
-.emergency-dispatch { width: 100%; min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 6px; color: #ff90a2; border-color: rgba(255,65,97,.38); }
-.emergency-dispatch:hover { color: #fff; background: rgba(255,65,97,.09); border-color: rgba(255,65,97,.65); }
+.signal-console .emergency-dispatch { width: 100%; min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 8px; color: #ff90a2; border: 1px solid rgba(255,65,97,.38); background: rgba(8,25,38,.88); font-family: Consolas, monospace; font-size: 7px; letter-spacing: .05em; cursor: pointer; }
+.signal-console .emergency-dispatch:hover { color: #fff; background: rgba(255,65,97,.09); border-color: rgba(255,65,97,.65); }
 .dispatch-icon { width: 22px; height: 22px; display: grid; place-items: center; color: white; background: var(--red); border-radius: 50%; font-size: 16px; font-weight: 700; box-shadow: 0 0 11px rgba(255,65,97,.45); }
 .emergency-dispatch > span:last-child { text-align: left; }
 .emergency-dispatch small { display: block; margin-bottom: 2px; color: #9f5261; font-size: 6px; letter-spacing: .1em; }
@@ -591,6 +579,7 @@ h2 {
 .legend-dot.caution { background: var(--amber); box-shadow: 0 0 5px var(--amber); }
 .legend-dot.critical { background: var(--red); box-shadow: 0 0 5px var(--red); }
 .legend-line { display: inline-block; width: 13px; margin-right: 4px; border-top: 1px dashed var(--cyan); vertical-align: 2px; }
+.legend-signal { display: inline-block; width: 5px; height: 5px; margin-right: 4px; border-radius: 50%; background: var(--green); box-shadow: 0 0 5px var(--green); vertical-align: 1px; }
 
 .threat-panel { min-height: 234px; }
 .threat-layout { position: relative; display: grid; place-items: center; min-height: 177px; }
@@ -743,12 +732,9 @@ h2 {
     .map-toolbar { min-height: 96px; align-items: stretch; flex-direction: column; gap: 9px; }
     .map-actions { width: 100%; min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .map-actions .tool-button { width: auto; min-width: 0; overflow: hidden; padding-inline: 3px; font-size: 6.5px; white-space: nowrap; }
-    .traffic-console { top: 12px; right: auto; left: 12px; width: calc(100vw - 44px); max-width: calc(100vw - 44px); overflow: hidden; }
-    .traffic-console-head { position: relative; padding-right: 34px; }
-    .traffic-console-head button { position: absolute; top: 0; right: 0; }
-    .lane-control { grid-template-columns: minmax(0, 1fr) 28px; gap: 4px 8px; padding-block: 3px; }
-    .lane-control input[type="range"] { grid-column: 1 / -1; grid-row: 2; }
-    .lane-control output { grid-column: 2; grid-row: 1; }
+    .signal-console { top: 12px; right: auto; left: 12px; width: calc(100vw - 44px); max-width: calc(100vw - 44px); overflow: hidden; }
+    .signal-console-head { position: relative; padding-right: 34px; }
+    .signal-console-head button { position: absolute; top: 0; right: 0; }
     .emergency-banner { top: 13px; min-width: 0; width: calc(100% - 28px); }
     .map-stage { min-height: 440px; }
     .map-legend { display: none; }

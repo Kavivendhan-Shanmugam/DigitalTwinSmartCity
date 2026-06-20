@@ -24,9 +24,14 @@ const runtime = {
     lightingOverride: null,
     anomalies: { gas: 0, power: 0, traffic: 0, network: 0 },
     trafficControl: {
-        mode: "AUTO",
         maxPerLane: 30,
         lanes: { north: 7, east: 8, south: 6, west: 6 }
+    },
+    signalSystem: {
+        phase: "NS_GREEN",
+        timer: 14,
+        greenDuration: 14,
+        yellowDuration: 3
     },
     emergency: {
         active: false,
@@ -49,12 +54,14 @@ const telemetry = {
         density: 34,
         vehicles: 27,
         meanSpeed: 42,
-        mode: "AUTO",
+        phase: "NS_GREEN",
+        phaseTimer: 14,
+        signals: { north: "green", south: "green", east: "red", west: "red" },
         lanes: { north: 7, east: 8, south: 6, west: 6 },
         maxPerLane: 30
     },
     network: { rssi: -73, packetLoss: 0.4, latency: 48 },
-    sectors: { environment: 94, power: 96, traffic: 88, network: 97, security: 94 },
+    sectors: { environment: 94, power: 96, network: 97, security: 94 },
     risks: { air: 15, power: 10, traffic: 30, network: 8, sensor: 12 },
     threat: { score: 12, level: "NORMAL" },
     cityHealth: 94,
@@ -75,9 +82,76 @@ function addIncident(severity, title, message, sector) {
     telemetry.incidents = telemetry.incidents.slice(0, 12);
 }
 
-addIncident("low", "Digital twin synchronized", "All five city sectors are reporting nominal state.", "security");
+addIncident("low", "Digital twin synchronized", "All four city sectors are reporting nominal state.", "security");
 addIncident("low", "LoRa mesh authenticated", "Environment and power nodes joined the gateway.", "network");
-addIncident("low", "Traffic model initialized", "Virtual mobility engine is tracking 27 vehicles.", "traffic");
+addIncident("low", "Signal controller online", "Four-way intersection running adaptive light cycle.", "signals");
+
+const SIGNAL_PHASES = ["NS_GREEN", "NS_YELLOW", "EW_GREEN", "EW_YELLOW"];
+
+function applySignalPhase(phase) {
+    const signals = { north: "red", south: "red", east: "red", west: "red" };
+    if (phase === "NS_GREEN") {
+        signals.north = "green";
+        signals.south = "green";
+    } else if (phase === "NS_YELLOW") {
+        signals.north = "yellow";
+        signals.south = "yellow";
+    } else if (phase === "EW_GREEN") {
+        signals.east = "green";
+        signals.west = "green";
+    } else if (phase === "EW_YELLOW") {
+        signals.east = "yellow";
+        signals.west = "yellow";
+    }
+    telemetry.traffic.signals = signals;
+    telemetry.traffic.phase = phase;
+}
+
+function updateTrafficSignals() {
+    if (runtime.emergency.active) {
+        const axis = ["north", "south"].includes(runtime.emergency.route) ? "NS" : "EW";
+        const signals = { north: "red", south: "red", east: "red", west: "red" };
+        if (axis === "NS") {
+            signals.north = "green";
+            signals.south = "green";
+        } else {
+            signals.east = "green";
+            signals.west = "green";
+        }
+        telemetry.traffic.signals = signals;
+        telemetry.traffic.phase = "EMERGENCY";
+        telemetry.traffic.phaseTimer = Math.max(0, Math.ceil(runtime.emergency.durationSeconds - (Date.now() - runtime.emergency.startedAt) / 1000));
+        return;
+    }
+
+    runtime.signalSystem.timer -= 1;
+    if (runtime.signalSystem.timer <= 0) {
+        const index = SIGNAL_PHASES.indexOf(runtime.signalSystem.phase);
+        runtime.signalSystem.phase = SIGNAL_PHASES[(index + 1) % SIGNAL_PHASES.length];
+        runtime.signalSystem.timer = runtime.signalSystem.phase.includes("YELLOW")
+            ? runtime.signalSystem.yellowDuration
+            : runtime.signalSystem.greenDuration;
+    }
+
+    applySignalPhase(runtime.signalSystem.phase);
+    telemetry.traffic.phaseTimer = runtime.signalSystem.timer;
+}
+
+function updateTrafficFlow() {
+    telemetry.traffic.density = clamp(32 + Math.sin(runtime.tick / 9) * 8 + randomBetween(-2, 2) + runtime.anomalies.traffic * 0.68, 5, 100);
+    telemetry.traffic.vehicles = Math.round(14 + telemetry.traffic.density * 0.42);
+    telemetry.traffic.meanSpeed = clamp(58 - telemetry.traffic.density * 0.52, 4, 55);
+    const total = telemetry.traffic.vehicles;
+    const north = Math.max(0, Math.round(total * 0.25 + randomBetween(-1, 1)));
+    const east = Math.max(0, Math.round(total * 0.29 + randomBetween(-1, 1)));
+    const south = Math.max(0, Math.round(total * 0.22 + randomBetween(-1, 1)));
+    runtime.trafficControl.lanes = {
+        north,
+        east,
+        south,
+        west: Math.max(0, total - north - east - south)
+    };
+}
 
 function threatLevel(score) {
     if (score >= 80) return "CRITICAL";
@@ -107,32 +181,19 @@ function updateSimulation() {
         telemetry.power.current = clamp(1.55 + telemetry.power.gridLoad * 0.018 + randomBetween(-0.06, 0.06), 0, 6);
         telemetry.power.watts = telemetry.power.voltage * telemetry.power.current;
 
-        if (runtime.trafficControl.mode === "MANUAL") {
-            const manualTotal = Object.values(runtime.trafficControl.lanes).reduce((sum, value) => sum + value, 0);
-            const capacity = runtime.trafficControl.maxPerLane * 4;
-            telemetry.traffic.density = clamp(manualTotal / capacity * 100, 0, 100);
-            telemetry.traffic.vehicles = manualTotal;
-            telemetry.traffic.meanSpeed = clamp(60 - telemetry.traffic.density * 0.56, 4, 58);
-        } else {
-            telemetry.traffic.density = clamp(32 + Math.sin(runtime.tick / 9) * 8 + randomBetween(-2, 2) + runtime.anomalies.traffic * 0.68, 5, 100);
-            telemetry.traffic.vehicles = Math.round(14 + telemetry.traffic.density * 0.42);
-            telemetry.traffic.meanSpeed = clamp(58 - telemetry.traffic.density * 0.52, 4, 55);
-            const total = telemetry.traffic.vehicles;
-            const north = Math.max(0, Math.round(total * 0.25 + randomBetween(-1, 1)));
-            const east = Math.max(0, Math.round(total * 0.29 + randomBetween(-1, 1)));
-            const south = Math.max(0, Math.round(total * 0.22 + randomBetween(-1, 1)));
-            runtime.trafficControl.lanes = {
-                north,
-                east,
-                south,
-                west: Math.max(0, total - north - east - south)
-            };
-        }
+        updateTrafficFlow();
 
         telemetry.network.rssi = clamp(-72 + randomBetween(-4, 3) - runtime.anomalies.network * 0.22, -122, -45);
         telemetry.network.packetLoss = clamp(0.35 + randomBetween(0, 0.35) + runtime.anomalies.network * 0.15, 0, 35);
         telemetry.network.latency = Math.round(clamp(42 + randomBetween(-5, 8) + runtime.anomalies.network * 0.8, 20, 360));
     }
+
+    if (runtime.anomalies.traffic > 40) {
+        runtime.signalSystem.greenDuration = 10;
+    } else {
+        runtime.signalSystem.greenDuration = 14;
+    }
+    updateTrafficSignals();
 
     runtime.nodes.environment.online = runtime.anomalies.network < 42;
     runtime.nodes.power.online = true;
@@ -156,15 +217,14 @@ function updateSimulation() {
 
     telemetry.sectors.environment = round(clamp(100 - airRisk * 0.7 - sensorRisk * 0.18, 0, 100));
     telemetry.sectors.power = round(clamp(100 - powerRisk * 0.82, 0, 100));
-    telemetry.sectors.traffic = round(clamp(100 - trafficRisk * 0.72, 0, 100));
     telemetry.sectors.network = round(clamp(100 - networkRisk * 0.84, 0, 100));
 
-    const weightedThreat = airRisk * 0.28 + powerRisk * 0.22 + trafficRisk * 0.18 + networkRisk * 0.22 + sensorRisk * 0.10;
+    const weightedThreat = airRisk * 0.30 + powerRisk * 0.24 + trafficRisk * 0.16 + networkRisk * 0.20 + sensorRisk * 0.10;
     const peakRisk = Math.max(airRisk, powerRisk, trafficRisk, networkRisk, sensorRisk);
     telemetry.threat.score = Math.round(clamp(weightedThreat * 0.55 + peakRisk * 0.65, 0, 100));
     telemetry.threat.level = threatLevel(telemetry.threat.score);
     telemetry.sectors.security = round(clamp(100 - telemetry.threat.score * 0.8, 0, 100));
-    telemetry.cityHealth = Math.round(Object.values(telemetry.sectors).reduce((sum, value) => sum + value, 0) / 5);
+    telemetry.cityHealth = Math.round(Object.values(telemetry.sectors).reduce((sum, value) => sum + value, 0) / 4);
 
     telemetry.environment.temperature = round(telemetry.environment.temperature);
     telemetry.environment.humidity = round(telemetry.environment.humidity);
@@ -176,7 +236,6 @@ function updateSimulation() {
     telemetry.power.gridLoad = Math.round(telemetry.power.gridLoad);
     telemetry.traffic.density = Math.round(telemetry.traffic.density);
     telemetry.traffic.meanSpeed = Math.round(telemetry.traffic.meanSpeed);
-    telemetry.traffic.mode = runtime.trafficControl.mode;
     telemetry.traffic.lanes = { ...runtime.trafficControl.lanes };
     telemetry.traffic.maxPerLane = runtime.trafficControl.maxPerLane;
     telemetry.network.rssi = Math.round(telemetry.network.rssi);
@@ -190,7 +249,7 @@ function updateSimulation() {
         const elapsedSeconds = (Date.now() - runtime.emergency.startedAt) / 1000;
         if (elapsedSeconds >= runtime.emergency.durationSeconds) {
             runtime.emergency.active = false;
-            addIncident("low", "Emergency corridor cleared", "The ambulance reached its destination and normal signal timing resumed.", "traffic");
+            addIncident("low", "Emergency corridor cleared", "The ambulance reached its destination and normal signal timing resumed.", "signals");
         }
     }
 
@@ -221,7 +280,7 @@ function injectIncident(type) {
     const definitions = {
         gas: ["critical", "Gas concentration surge", "MQ sensor signature exceeded the safe air-quality envelope.", "environment", 74],
         power: ["high", "Power demand spike", "Grid load rose beyond the predicted operating band.", "power", 82],
-        traffic: ["medium", "Congestion cluster predicted", "Traffic model detected compounding delay in Sector C.", "traffic", 78],
+        traffic: ["medium", "Intersection congestion", "Queue buildup detected on the four-way signal grid.", "signals", 78],
         network: ["high", "Environment node unreachable", "LoRa heartbeat expired; failover monitoring enabled.", "network", 68]
     };
     const definition = definitions[type];
@@ -240,31 +299,11 @@ function recoverSystems() {
     telemetry.traffic.density = 35;
     telemetry.network.packetLoss = 0.4;
     telemetry.network.rssi = -72;
-    runtime.trafficControl.mode = "AUTO";
+    runtime.signalSystem.phase = "NS_GREEN";
+    runtime.signalSystem.timer = 14;
+    applySignalPhase("NS_GREEN");
     runtime.emergency.active = false;
     addIncident("low", "Autonomous recovery complete", "Affected sectors returned to their nominal operating envelopes.", "security");
-}
-
-function setTrafficSimulation(payload) {
-    if (!payload || !["AUTO", "MANUAL"].includes(payload.mode)) return false;
-
-    if (payload.mode === "MANUAL") {
-        if (!payload.lanes || typeof payload.lanes !== "object") return false;
-        const nextLanes = {};
-        for (const lane of ["north", "east", "south", "west"]) {
-            const value = Number(payload.lanes[lane]);
-            if (!Number.isFinite(value)) return false;
-            nextLanes[lane] = Math.round(clamp(value, 0, runtime.trafficControl.maxPerLane));
-        }
-        runtime.trafficControl.mode = "MANUAL";
-        runtime.trafficControl.lanes = nextLanes;
-        const total = Object.values(runtime.trafficControl.lanes).reduce((sum, value) => sum + value, 0);
-        addIncident("low", "Manual traffic model loaded", `${total} virtual vehicles distributed across four directional lanes.`, "traffic");
-    } else {
-        runtime.trafficControl.mode = "AUTO";
-        addIncident("low", "Automatic traffic flow resumed", "Lane volumes are again controlled by the virtual mobility engine.", "traffic");
-    }
-    return true;
 }
 
 function dispatchEmergency(type = "ambulance") {
@@ -279,7 +318,8 @@ function dispatchEmergency(type = "ambulance") {
         durationSeconds: 24
     };
     const label = type.charAt(0).toUpperCase() + type.slice(1);
-    addIncident("high", `${label} priority route active`, `Signals switched to emergency priority on the ${route.toUpperCase()} corridor.`, "traffic");
+    addIncident("high", `${label} priority route active`, `Signals switched to emergency priority on the ${route.toUpperCase()} corridor.`, "signals");
+    updateTrafficSignals();
     return true;
 }
 
@@ -319,13 +359,6 @@ app.post("/api/recover", (_request, response) => {
     response.json({ accepted: true, snapshot });
 });
 
-app.post("/api/traffic", (request, response) => {
-    if (!setTrafficSimulation(request.body)) return response.status(400).json({ error: "Expected mode AUTO or MANUAL with north/east/south/west lane counts." });
-    const snapshot = updateSimulation();
-    io.emit("cityData", snapshot);
-    response.json({ accepted: true, snapshot });
-});
-
 app.post("/api/emergency/:type", (request, response) => {
     if (!dispatchEmergency(request.params.type)) return response.status(400).json({ error: "Emergency type must be ambulance, fire, or police." });
     const snapshot = updateSimulation();
@@ -341,9 +374,6 @@ io.on("connection", (socket) => {
     socket.on("recoverSystems", () => {
         recoverSystems();
         io.emit("cityData", updateSimulation());
-    });
-    socket.on("setTrafficSimulation", (payload) => {
-        if (setTrafficSimulation(payload)) io.emit("cityData", updateSimulation());
     });
     socket.on("dispatchEmergency", (type) => {
         if (dispatchEmergency(type)) io.emit("cityData", updateSimulation());

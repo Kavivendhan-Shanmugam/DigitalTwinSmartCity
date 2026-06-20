@@ -71,10 +71,10 @@
                 <div class="sparkline" id="powerSparkline" aria-hidden="true"></div>
             </article>
             <article class="metric-card" data-accent="violet">
-                <div class="metric-icon">FLOW</div>
+                <div class="metric-icon">SIG</div>
                 <div class="metric-copy">
-                    <span class="data-label">TRAFFIC DENSITY</span>
-                    <strong><span id="trafficDensity">--</span><small>%</small></strong>
+                    <span class="data-label">SIGNAL PHASE</span>
+                    <strong id="signalPhase">--</strong>
                     <span class="metric-trend" id="vehicleCount">-- VEHICLES</span>
                 </div>
                 <div class="sparkline" id="trafficSparkline" aria-hidden="true"></div>
@@ -120,7 +120,7 @@
                             <span class="data-label">LIVE SYSTEMS</span>
                             <h2>Sector integrity</h2>
                         </div>
-                        <span class="micro-code">05 ZONES</span>
+                        <span class="micro-code">04 ZONES</span>
                     </div>
                     <div class="sector-stack" id="sectorStack">
                         <button class="sector-row active" data-sector="environment">
@@ -135,20 +135,14 @@
                             <span class="sector-meter"><i id="powerBar"></i></span>
                             <strong id="powerHealth">--</strong>
                         </button>
-                        <button class="sector-row" data-sector="traffic">
-                            <span class="sector-index">C</span>
-                            <span class="sector-name">Mobility<small>VIRTUAL ENGINE</small></span>
-                            <span class="sector-meter"><i id="trafficBar"></i></span>
-                            <strong id="trafficHealth">--</strong>
-                        </button>
                         <button class="sector-row" data-sector="network">
-                            <span class="sector-index">D</span>
+                            <span class="sector-index">C</span>
                             <span class="sector-name">LoRa mesh<small>SX1278 UPLINK</small></span>
                             <span class="sector-meter"><i id="networkBar"></i></span>
                             <strong id="networkHealth">--</strong>
                         </button>
                         <button class="sector-row" data-sector="security">
-                            <span class="sector-index">E</span>
+                            <span class="sector-index">D</span>
                             <span class="sector-name">Cyber defense<small>ANOMALY ENGINE</small></span>
                             <span class="sector-meter"><i id="securityBar"></i></span>
                             <strong id="securityHealth">--</strong>
@@ -167,7 +161,7 @@
                         <div class="map-actions">
                             <button class="tool-button active" id="liveViewButton" type="button"><span></span> LIVE VIEW</button>
                             <button class="tool-button" id="lightingButton" type="button">LIGHTS: AUTO</button>
-                            <button class="tool-button" id="trafficConsoleButton" type="button">TRAFFIC LAB</button>
+                            <button class="tool-button" id="signalConsoleButton" type="button">SIGNALS</button>
                         </div>
                     </div>
 
@@ -198,47 +192,51 @@
                             </div>
                             <b id="emergencyEta">ETA --s</b>
                         </div>
-                        <aside class="traffic-console" id="trafficConsole" aria-label="Virtual traffic simulation controls">
-                            <div class="traffic-console-head">
+                        <aside class="signal-console" id="signalConsole" aria-label="Four-way traffic signal controls">
+                            <div class="signal-console-head">
                                 <div>
-                                    <span class="data-label">MOBILITY ENGINE</span>
-                                    <h3>Virtual Traffic Lab</h3>
+                                    <span class="data-label">INTERSECTION GRID</span>
+                                    <h3>Traffic Signal System</h3>
                                 </div>
-                                <button type="button" id="trafficConsoleClose" aria-label="Close traffic controls">×</button>
+                                <button type="button" id="signalConsoleClose" aria-label="Close signal controls">×</button>
                             </div>
-                            <div class="traffic-mode-line">
-                                <span>CONTROL MODE</span>
-                                <strong id="trafficMode">AUTO</strong>
+                            <div class="signal-phase-line">
+                                <span>ACTIVE PHASE</span>
+                                <strong id="signalPhaseLabel">NS GREEN</strong>
                             </div>
-                            <div class="lane-controls">
-                                <label class="lane-control" for="laneNorth">
+                            <div class="signal-timer-line">
+                                <span>PHASE TIMER</span>
+                                <strong id="signalPhaseTimer">14s</strong>
+                            </div>
+                            <div class="signal-grid" id="signalGrid">
+                                <div class="signal-post" data-arm="north">
                                     <span>NORTH</span>
-                                    <input id="laneNorth" data-lane="north" type="range" min="0" max="30" value="7">
-                                    <output id="laneNorthValue">07</output>
-                                </label>
-                                <label class="lane-control" for="laneEast">
+                                    <div class="signal-lamp red"></div>
+                                    <div class="signal-lamp yellow"></div>
+                                    <div class="signal-lamp green active"></div>
+                                </div>
+                                <div class="signal-post" data-arm="east">
                                     <span>EAST</span>
-                                    <input id="laneEast" data-lane="east" type="range" min="0" max="30" value="8">
-                                    <output id="laneEastValue">08</output>
-                                </label>
-                                <label class="lane-control" for="laneSouth">
+                                    <div class="signal-lamp red active"></div>
+                                    <div class="signal-lamp yellow"></div>
+                                    <div class="signal-lamp green"></div>
+                                </div>
+                                <div class="signal-post" data-arm="south">
                                     <span>SOUTH</span>
-                                    <input id="laneSouth" data-lane="south" type="range" min="0" max="30" value="6">
-                                    <output id="laneSouthValue">06</output>
-                                </label>
-                                <label class="lane-control" for="laneWest">
+                                    <div class="signal-lamp red"></div>
+                                    <div class="signal-lamp yellow"></div>
+                                    <div class="signal-lamp green active"></div>
+                                </div>
+                                <div class="signal-post" data-arm="west">
                                     <span>WEST</span>
-                                    <input id="laneWest" data-lane="west" type="range" min="0" max="30" value="6">
-                                    <output id="laneWestValue">06</output>
-                                </label>
+                                    <div class="signal-lamp red active"></div>
+                                    <div class="signal-lamp yellow"></div>
+                                    <div class="signal-lamp green"></div>
+                                </div>
                             </div>
-                            <div class="traffic-summary">
-                                <div><span>TOTAL VEHICLES</span><strong id="trafficPreviewTotal">27</strong></div>
-                                <div><span>TRAFFIC DENSITY</span><strong id="trafficPreviewDensity">23%</strong></div>
-                            </div>
-                            <div class="traffic-actions">
-                                <button type="button" id="applyTrafficButton">APPLY MANUAL FLOW</button>
-                                <button type="button" id="autoTrafficButton">RESUME AUTO</button>
+                            <div class="signal-summary">
+                                <div><span>ROAD VEHICLES</span><strong id="signalVehicleCount">27</strong></div>
+                                <div><span>INTERSECTION LOAD</span><strong id="signalDensity">34%</strong></div>
                             </div>
                             <button class="emergency-dispatch" type="button" id="ambulanceButton">
                                 <span class="dispatch-icon">+</span>
@@ -250,6 +248,7 @@
                             <span><i class="legend-dot caution"></i> DEGRADED</span>
                             <span><i class="legend-dot critical"></i> CRITICAL</span>
                             <span><i class="legend-line"></i> LORA LINK</span>
+                            <span><i class="legend-signal"></i> SIGNAL</span>
                         </div>
                     </div>
                 </article>
@@ -297,7 +296,7 @@
                     <div class="command-grid">
                         <button type="button" data-incident="gas"><span>A1</span> GAS LEAK</button>
                         <button type="button" data-incident="power"><span>B1</span> GRID SPIKE</button>
-                        <button type="button" data-incident="traffic"><span>C1</span> CONGESTION</button>
+                        <button type="button" data-incident="traffic"><span>S1</span> CONGESTION</button>
                         <button type="button" data-incident="network"><span>D1</span> NODE LOSS</button>
                     </div>
                     <button class="restore-button" id="restoreButton" type="button">EXECUTE AUTONOMOUS RECOVERY</button>

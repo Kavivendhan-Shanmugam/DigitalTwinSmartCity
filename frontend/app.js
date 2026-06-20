@@ -11,22 +11,20 @@ const zoneMeta = {
         title: "POWER GRID",
         detail: "Voltage, current, demand and distribution health monitoring."
     },
-    traffic: {
-        code: "C",
-        title: "MOBILITY",
-        detail: "Virtual traffic density, vehicle flow and congestion prediction."
-    },
     network: {
-        code: "D",
+        code: "C",
         title: "LORA MESH",
         detail: "Long-range node availability, signal strength and packet integrity."
     },
     security: {
-        code: "E",
+        code: "D",
         title: "CYBER DEFENSE",
         detail: "Anomaly fusion, city health scoring and autonomous response."
     }
 };
+
+const ROUTE_SIGNALS = ["east", "west", "north", "south"];
+const SIGNAL_COLORS = { red: "#ff4161", yellow: "#ffbf5a", green: "#41f3a4" };
 
 const state = {
     selectedSector: "environment",
@@ -37,12 +35,14 @@ const state = {
             density: 0,
             vehicles: 0,
             meanSpeed: 0,
-            mode: "AUTO",
+            phase: "NS_GREEN",
+            phaseTimer: 14,
+            signals: { north: "red", south: "red", east: "red", west: "red" },
             lanes: { north: 0, east: 0, south: 0, west: 0 },
             maxPerLane: 30
         },
         network: { rssi: -120, packetLoss: 100, latency: 0 },
-        sectors: { environment: 0, power: 0, traffic: 0, network: 0, security: 0 },
+        sectors: { environment: 0, power: 0, network: 0, security: 0 },
         risks: { air: 0, power: 0, traffic: 0, network: 0, sensor: 0 },
         threat: { score: 0, level: "NORMAL" },
         cityHealth: 0,
@@ -90,12 +90,34 @@ function cityCondition(health, threat) {
 function updateSector(name, value) {
     const bar = $(`${name}Bar`);
     const label = $(`${name}Health`);
+    if (!bar || !label) return;
     const color = healthColor(value);
     bar.style.width = `${value}%`;
     bar.style.background = color;
     bar.style.boxShadow = `0 0 8px ${color}`;
     label.textContent = Math.round(value);
     label.style.color = color;
+}
+
+function formatSignalPhase(phase) {
+    return String(phase || "NS_GREEN").replaceAll("_", " ");
+}
+
+function updateSignalPanel(traffic) {
+    const signals = traffic.signals || {};
+    $("signalPhase").textContent = formatSignalPhase(traffic.phase);
+    $("signalPhaseLabel").textContent = formatSignalPhase(traffic.phase);
+    $("signalPhaseTimer").textContent = `${Math.max(0, traffic.phaseTimer || 0)}s`;
+    $("signalVehicleCount").textContent = traffic.vehicles ?? 0;
+    $("signalDensity").textContent = `${Math.round(traffic.density ?? 0)}%`;
+
+    document.querySelectorAll(".signal-post").forEach((post) => {
+        const arm = post.dataset.arm;
+        const active = signals[arm] || "red";
+        post.querySelectorAll(".signal-lamp").forEach((lamp) => {
+            lamp.classList.toggle("active", lamp.classList.contains(active));
+        });
+    });
 }
 
 function updateIncidents(incidents) {
@@ -130,23 +152,6 @@ function updateNode(elementId, node) {
     element.querySelector(":scope > b").textContent = online ? "ONLINE" : "OFFLINE";
 }
 
-function laneControlValues() {
-    return ["north", "east", "south", "west"].reduce((lanes, lane) => {
-        const input = $(`lane${lane.charAt(0).toUpperCase()}${lane.slice(1)}`);
-        lanes[lane] = Number(input.value);
-        return lanes;
-    }, {});
-}
-
-function refreshTrafficPreview() {
-    const lanes = laneControlValues();
-    const total = Object.values(lanes).reduce((sum, value) => sum + value, 0);
-    const maxPerLane = Number($("laneNorth").max) || 30;
-    const density = Math.round(total / (maxPerLane * 4) * 100);
-    $("trafficPreviewTotal").textContent = total;
-    $("trafficPreviewDensity").textContent = `${density}%`;
-}
-
 function updateDashboard(data) {
     state.data = data;
 
@@ -156,7 +161,7 @@ function updateDashboard(data) {
     $("airStatus").textContent = data.environment.airQuality > 180 ? "HAZARDOUS SIGNATURE" : data.environment.airQuality > 100 ? "ELEVATED PARTICULATES" : "AIR QUALITY GOOD";
     $("gridLoad").textContent = Math.round(data.power.gridLoad);
     $("powerValue").textContent = `${Number(data.power.watts).toFixed(1)} W / ${Number(data.power.voltage).toFixed(2)} V`;
-    $("trafficDensity").textContent = Math.round(data.traffic.density);
+    $("signalPhase").textContent = formatSignalPhase(data.traffic.phase);
     $("vehicleCount").textContent = `${data.traffic.vehicles} VEHICLES / ${data.traffic.meanSpeed} KMH`;
     $("packetIntegrity").textContent = Math.max(0, 100 - data.network.packetLoss).toFixed(1);
     $("rssiValue").textContent = `${data.network.rssi} dBm / ${data.network.latency} ms`;
@@ -183,19 +188,7 @@ function updateDashboard(data) {
     $("weatherReadout").textContent = `HUM ${Number(data.environment.humidity).toFixed(1)}%`;
     $("lightReadout").textContent = `LUX ${Math.round(data.environment.light).toString().padStart(4, "0")}`;
     $("lightingButton").textContent = `LIGHTS: ${data.lightingMode}`;
-    $("trafficMode").textContent = data.traffic.mode;
-    const laneInputActive = document.activeElement?.matches?.("[data-lane]");
-    if (!laneInputActive) {
-        Object.entries(data.traffic.lanes || {}).forEach(([lane, value]) => {
-            const input = $(`lane${lane.charAt(0).toUpperCase()}${lane.slice(1)}`);
-            const output = $(`lane${lane.charAt(0).toUpperCase()}${lane.slice(1)}Value`);
-            if (!input || !output) return;
-            input.max = data.traffic.maxPerLane || 30;
-            input.value = value;
-            output.textContent = Math.round(value).toString().padStart(2, "0");
-        });
-        refreshTrafficPreview();
-    }
+    updateSignalPanel(data.traffic);
 
     const emergency = data.emergency || { active: false };
     const emergencyBanner = $("emergencyBanner");
@@ -237,7 +230,7 @@ function drawThreatRadar(risks) {
     const entries = [
         ["AIR", risks.air],
         ["GRID", risks.power],
-        ["FLOW", risks.traffic],
+        ["SIG", risks.traffic],
         ["NET", risks.network],
         ["SENSOR", risks.sensor]
     ];
@@ -304,25 +297,29 @@ class CityRenderer {
         this.height = 620;
         this.elapsed = 0;
         this.lastFrame = performance.now();
+        this.intersection = { x1: 322, y1: 219, x2: 679, y2: 418, cx: 500, cy: 318 };
         this.zones = {
-            environment: { x: 62, y: 62, w: 246, h: 146, cx: 185, cy: 135 },
-            power: { x: 704, y: 60, w: 235, h: 150, cx: 822, cy: 135 },
-            traffic: { x: 344, y: 194, w: 310, h: 235, cx: 500, cy: 312 },
-            network: { x: 713, y: 424, w: 225, h: 130, cx: 826, cy: 489 },
-            security: { x: 62, y: 424, w: 245, h: 130, cx: 185, cy: 489 }
+            environment: { x: 42, y: 42, w: 280, h: 155, cx: 182, cy: 120 },
+            power: { x: 678, y: 42, w: 280, h: 155, cx: 818, cy: 120 },
+            network: { x: 678, y: 423, w: 280, h: 155, cx: 818, cy: 500 },
+            security: { x: 42, y: 423, w: 280, h: 155, cx: 182, cy: 500 }
         };
+        this.signalPosts = [
+            { x: 500, y: 202, arm: "north" },
+            { x: 696, y: 318, arm: "east" },
+            { x: 500, y: 435, arm: "south" },
+            { x: 304, y: 318, arm: "west" }
+        ];
         this.buildings = [
             [87, 91, 46, 38, 7], [151, 83, 69, 51, 9], [237, 103, 42, 67, 6],
             [727, 88, 49, 69, 8], [797, 78, 53, 48, 10], [869, 104, 39, 61, 7],
-            [379, 232, 61, 48, 8], [458, 230, 38, 72, 6], [540, 246, 72, 40, 9],
-            [376, 340, 42, 60, 7], [444, 348, 78, 47, 11], [551, 329, 55, 70, 8],
             [89, 454, 52, 57, 8], [164, 445, 73, 43, 9], [253, 467, 35, 55, 6],
             [735, 451, 43, 50, 8], [802, 443, 58, 66, 10], [882, 464, 35, 44, 6]
         ];
         this.vehicles = Array.from({ length: 120 }, (_, index) => ({
             route: index % 4,
             progress: ((index * 0.173) + (index % 7) * 0.041) % 1,
-            direction: [1, -1, -1, 1][index % 4],
+            direction: [1, -1, 1, -1][index % 4],
             color: ["#38d9ff", "#ffbf5a", "#a784ff", "#41f3a4"][index % 4]
         }));
         this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -355,8 +352,31 @@ class CityRenderer {
         this.lastFrame = time;
         this.elapsed += delta;
         const meanSpeed = state.data.traffic.meanSpeed || 35;
+        const signals = state.data.traffic.signals || {};
+        const emergency = state.data.emergency?.active;
+        const speedFactor = 0.025 + meanSpeed / 1100;
+
         this.vehicles.forEach((vehicle) => {
-            vehicle.progress = (vehicle.progress + delta * (0.025 + meanSpeed / 1100) * vehicle.direction + 1) % 1;
+            const arm = ROUTE_SIGNALS[vehicle.route];
+            const signal = emergency ? "green" : (signals[arm] || "red");
+            const step = delta * speedFactor * vehicle.direction;
+            let next = (vehicle.progress + step + 1) % 1;
+
+            if (signal !== "green" && !emergency) {
+                const stopLine = vehicle.direction > 0 ? 0.34 : 0.66;
+                const crossingStop = vehicle.direction > 0
+                    ? vehicle.progress < stopLine && next >= stopLine
+                    : vehicle.progress > stopLine && next <= stopLine;
+                const beforeStop = vehicle.direction > 0 ? vehicle.progress < stopLine : vehicle.progress > stopLine;
+
+                if (signal === "red" && beforeStop && crossingStop) {
+                    next = vehicle.progress;
+                } else if (signal === "yellow" && beforeStop && crossingStop) {
+                    next = vehicle.progress;
+                }
+            }
+
+            vehicle.progress = next;
         });
         this.draw();
         requestAnimationFrame((nextTime) => this.frame(nextTime));
@@ -375,9 +395,11 @@ class CityRenderer {
         this.drawZones();
         this.drawLinks();
         this.drawRoads();
+        this.drawIntersection();
         this.drawEmergencyCorridor();
         this.drawBuildings();
         this.drawStreetLights();
+        this.drawTrafficLights();
         this.drawVehicles();
         this.drawAmbulance();
         this.drawZoneLabels();
@@ -457,6 +479,67 @@ class CityRenderer {
         });
     }
 
+    drawIntersection() {
+        const ctx = this.context;
+        const box = this.intersection;
+        ctx.fillStyle = "rgba(8,22,34,.92)";
+        ctx.fillRect(box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1);
+        ctx.strokeStyle = "rgba(56,217,255,.28)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1);
+
+        ctx.setLineDash([8, 10]);
+        ctx.lineDashOffset = -this.elapsed * 6;
+        ctx.strokeStyle = "rgba(255,255,255,.12)";
+        ctx.beginPath();
+        ctx.moveTo(box.cx, box.y1 + 8);
+        ctx.lineTo(box.cx, box.y2 - 8);
+        ctx.moveTo(box.x1 + 8, box.cy);
+        ctx.lineTo(box.x2 - 8, box.cy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = "rgba(56,217,255,.55)";
+        ctx.font = "7px Consolas, monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("4-WAY INTERSECTION", box.cx, box.cy - 8);
+        ctx.fillStyle = "rgba(105,131,151,.85)";
+        ctx.fillText(formatSignalPhase(state.data.traffic.phase), box.cx, box.cy + 8);
+    }
+
+    drawTrafficLights() {
+        const ctx = this.context;
+        const signals = state.data.traffic.signals || {};
+        this.signalPosts.forEach((post) => {
+            const active = signals[post.arm] || "red";
+            const colors = ["red", "yellow", "green"];
+            const lampRadius = 2.4;
+            const spacing = 6.5;
+            const housingW = 10;
+            const housingH = spacing * 2 + 8;
+
+            ctx.fillStyle = "rgba(3,12,20,.92)";
+            ctx.fillRect(post.x - housingW / 2, post.y - housingH / 2, housingW, housingH);
+            ctx.strokeStyle = "rgba(56,217,255,.35)";
+            ctx.strokeRect(post.x - housingW / 2, post.y - housingH / 2, housingW, housingH);
+
+            colors.forEach((color, index) => {
+                const y = post.y - spacing + index * spacing;
+                const lit = active === color;
+                ctx.beginPath();
+                ctx.arc(post.x, y, lampRadius, 0, Math.PI * 2);
+                ctx.fillStyle = lit ? SIGNAL_COLORS[color] : "rgba(35,52,62,.85)";
+                if (lit) {
+                    ctx.shadowColor = SIGNAL_COLORS[color];
+                    ctx.shadowBlur = 10;
+                }
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+        });
+    }
+
     drawLinks() {
         const ctx = this.context;
         const gateway = this.zones.network;
@@ -531,12 +614,20 @@ class CityRenderer {
             let y;
             let width = 10;
             let height = 4;
-            if (vehicle.route === 0 || vehicle.route === 1) {
+            if (vehicle.route === 0) {
                 x = vehicle.progress * 1040 - 20;
-                y = vehicle.route === 0 ? 212 : 425;
-            } else {
-                x = vehicle.route === 2 ? 315 : 686;
+                y = 212;
+            } else if (vehicle.route === 1) {
+                x = 1020 - vehicle.progress * 1040;
+                y = 425;
+            } else if (vehicle.route === 2) {
+                x = 315;
                 y = vehicle.progress * 660 - 20;
+                width = 4;
+                height = 10;
+            } else {
+                x = 686;
+                y = 640 - vehicle.progress * 660;
                 width = 4;
                 height = 10;
             }
@@ -681,43 +772,24 @@ document.querySelectorAll("[data-incident]").forEach((button) => {
 $("restoreButton").addEventListener("click", () => socket?.emit("recoverSystems"));
 $("lightingButton").addEventListener("click", () => socket?.emit("toggleLighting"));
 
-function setTrafficConsole(open) {
-    $("trafficConsole").classList.toggle("open", open);
-    $("trafficConsoleButton").classList.toggle("active", open);
-    $("trafficConsoleButton").setAttribute("aria-expanded", String(open));
-    if (open) selectSector("traffic");
+function setSignalConsole(open) {
+    $("signalConsole").classList.toggle("open", open);
+    $("signalConsoleButton").classList.toggle("active", open);
+    $("signalConsoleButton").setAttribute("aria-expanded", String(open));
 }
 
-$("trafficConsoleButton").setAttribute("aria-expanded", "false");
-$("trafficConsoleButton").addEventListener("click", () => setTrafficConsole(!$("trafficConsole").classList.contains("open")));
-$("trafficConsoleClose").addEventListener("click", () => setTrafficConsole(false));
-
-document.querySelectorAll("[data-lane]").forEach((input) => {
-    input.addEventListener("input", () => {
-        const lane = input.dataset.lane;
-        $(`lane${lane.charAt(0).toUpperCase()}${lane.slice(1)}Value`).textContent = Number(input.value).toString().padStart(2, "0");
-        refreshTrafficPreview();
-    });
-});
-
-$("applyTrafficButton").addEventListener("click", () => {
-    if (!socket?.connected) return;
-    socket.emit("setTrafficSimulation", { mode: "MANUAL", lanes: laneControlValues() });
-});
-
-$("autoTrafficButton").addEventListener("click", () => {
-    if (!socket?.connected) return;
-    socket.emit("setTrafficSimulation", { mode: "AUTO" });
-});
+$("signalConsoleButton").setAttribute("aria-expanded", "false");
+$("signalConsoleButton").addEventListener("click", () => setSignalConsole(!$("signalConsole").classList.contains("open")));
+$("signalConsoleClose").addEventListener("click", () => setSignalConsole(false));
 
 $("ambulanceButton").addEventListener("click", () => {
     if (!socket?.connected) return;
     socket.emit("dispatchEmergency", "ambulance");
-    setTrafficConsole(false);
+    setSignalConsole(false);
 });
 
 document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") setTrafficConsole(false);
+    if (event.key === "Escape") setSignalConsole(false);
 });
 
 setInterval(() => {
@@ -725,13 +797,12 @@ setInterval(() => {
 }, 250);
 
 selectSector("environment");
-refreshTrafficPreview();
 drawThreatRadar(state.data.risks);
 new CityRenderer($("cityCanvas"));
 
-if (new URLSearchParams(window.location.search).get("trafficLab") === "open") {
-    document.documentElement.classList.add("traffic-lab-deep-link");
-    setTrafficConsole(true);
+if (new URLSearchParams(window.location.search).get("signals") === "open") {
+    document.documentElement.classList.add("signal-console-deep-link");
+    setSignalConsole(true);
 }
 
 fetch("/api/status")
